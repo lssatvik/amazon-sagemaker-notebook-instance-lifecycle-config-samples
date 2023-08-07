@@ -12,7 +12,7 @@
 #     permissions and limitations under the License.
 
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 import getopt, sys
 import urllib3
 import boto3
@@ -69,8 +69,7 @@ if missingConfiguration:
 
 
 def is_idle(last_activity):
-    last_activity = datetime.strptime(last_activity,"%Y-%m-%dT%H:%M:%S.%fz")
-    if (datetime.now() - last_activity).total_seconds() > time:
+    if (datetime.now().astimezone() - last_activity).total_seconds() > time:
         print('Notebook is idle. Last activity time = ', last_activity)
         return True
     else:
@@ -91,16 +90,17 @@ if len(data) > 0:
     for notebook in data:
         # Idleness is defined by Jupyter
         # https://github.com/jupyter/notebook/issues/4634
+        last_activity = datetime.strptime(notebook['kernel']['last_activity'],"%Y-%m-%dT%H:%M:%S.%fz").replace(tzinfo=timezone.utc).astimezone()
         if notebook['kernel']['execution_state'] == 'idle':
             if not ignore_connections:
                 if notebook['kernel']['connections'] == 0:
-                    if not is_idle(notebook['kernel']['last_activity']):
+                    if not is_idle(last_activity):
                         idle = False
                 else:
                     idle = False
                     print('Notebook idle state set as %s because no kernel has been detected.' % idle)
             else:
-                if not is_idle(notebook['kernel']['last_activity']):
+                if not is_idle(last_activity):
                     idle = False
                     print('Notebook idle state set as %s since kernel connections are ignored.' % idle)
         else:
@@ -111,7 +111,7 @@ else:
     uptime = client.describe_notebook_instance(
         NotebookInstanceName=get_notebook_name()
     )['LastModifiedTime']
-    if not is_idle(uptime.strftime("%Y-%m-%dT%H:%M:%S.%fz")):
+    if not is_idle(uptime):
         idle = False
         print('Notebook idle state set as %s since no sessions detected.' % idle)
 
